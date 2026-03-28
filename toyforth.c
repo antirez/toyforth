@@ -117,6 +117,7 @@ void freeObject(tfobj *o) {
             tfobj *ele = o->list.ele[j];
             release(ele);
         }
+        free(o->list.ele);
         break;
     case TFOBJ_TYPE_SYMBOL:
     case TFOBJ_TYPE_STR:
@@ -287,7 +288,7 @@ tfobj *compile(char *prg) {
 
     tfobj *parsed = createListObject();
 
-    while(parser.p) {
+    while(parser.p[0]) {
         tfobj *o;
         char *token_start = parser.p;
 
@@ -481,6 +482,10 @@ int main(int argc, char **argv) {
     fclose(fp);
 
     tfobj *prg = compile(prgtext);
+    if (prg == NULL) {
+        free(prgtext);
+        return 1;
+    }
     printObject(prg);
     printf("\n");
 
