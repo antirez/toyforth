@@ -276,6 +276,27 @@ tfobj *parseSymbol(tfparser *parser) {
     return createSymbolObject(start,len);
 }
 
+/* Read one integer, function name, or operator. */
+tfobj *parseToken(tfparser *parser) {
+    /* A sign starts a number only at the start or after a separator or whitespace. */
+    if (isdigit(parser->p[0]) ||
+        ((parser->p[0] == '-' || parser->p[0] == '+') &&
+         isdigit(parser->p[1]) &&
+         (parser->p == parser->prg || isspace(parser->p[-1]) ||
+          parser->p[-1] == ';')))
+    {
+        return parseNumber(parser);
+    } else if(isalpha((unsigned char)parser->p[0]) || parser->p[0] == '_') {
+        return parseSymbol(parser);
+    } else if(parser->p[0] && strchr("+-*/%",parser->p[0]) != NULL) {
+        tfobj *o = createSymbolObject(parser->p,1);
+        parser->p++;
+        return o;
+    } else {
+        return NULL;
+    }
+}
+
 tfobj *compile(char *prg) {
     tfparser parser;
     parser.prg = prg;
@@ -294,22 +315,7 @@ tfobj *compile(char *prg) {
             continue;
         }
 
-        /* A sign starts a number only at the start or after a separator or whitespace. */
-        if (isdigit(parser.p[0]) ||
-            ((parser.p[0] == '-' || parser.p[0] == '+') &&
-             isdigit(parser.p[1]) &&
-             (parser.p == parser.prg || isspace(parser.p[-1]) ||
-              parser.p[-1] == ';')))
-        {
-            o = parseNumber(&parser);
-        } else if(isalpha((unsigned char)parser.p[0]) || parser.p[0] == '_') {
-            o = parseSymbol(&parser);
-        } else if(strchr("+-*/%",parser.p[0]) != NULL) {
-            o = createSymbolObject(parser.p,1);
-            parser.p++;
-        } else {
-            o = NULL;
-        }
+        o = parseToken(&parser);
 
         // Check if the current token produced a parsing error.
         if (o == NULL) {
