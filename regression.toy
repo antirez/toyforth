@@ -29,10 +29,11 @@
 +
 
 abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ MixedCase
+_ __ _123 _name name_ name123 name_123 Name_123
 true false dup drop swap over rot
 + - * / %
 ++ -- ** // %% +-*/%
 foo+bar left-right times* divide/ mod%
-word123 123word a-1
+word123 a-1
 10-3 -2-3 10+3
-+42 --42 0x10 1e3
++42 --42

@@ -249,6 +249,8 @@ tfobj *parseNumber(tfparser *parser) {
 
     if (parser->p[0] == '-' || parser->p[0] == '+') parser->p++;
     while(parser->p[0] && isdigit(parser->p[0])) parser->p++;
+    if (isalpha((unsigned char)parser->p[0]) || parser->p[0] == '_')
+        return NULL;
     end = parser->p;
     int numlen = end-start;
     if (numlen >= MAX_NUM_LEN) return NULL;
@@ -260,17 +262,9 @@ tfobj *parseNumber(tfparser *parser) {
     return o;
 }
 
-/* Return true if the character 'c' is one of the characters
- * acceptable for our symbols. */
+/* Return true if 'c' is acceptable within a function name. */
 int is_symbol_char(int c) {
-    char symchars[] = "+-*/%";
-    if (isalpha(c)) {
-        return 1;
-    } else if (strchr(symchars,c) != NULL) {
-        return 1;
-    } else {
-        return 0;
-    }
+    return isalnum((unsigned char)c) || c == '_';
 }
 
 tfobj *parseSymbol(tfparser *parser) {
@@ -301,8 +295,11 @@ tfobj *compile(char *prg) {
              (parser.p == parser.prg || isspace(parser.p[-1]))))
         {
             o = parseNumber(&parser);
-        } else if(is_symbol_char(parser.p[0])) {
+        } else if(isalpha((unsigned char)parser.p[0]) || parser.p[0] == '_') {
             o = parseSymbol(&parser);
+        } else if(strchr("+-*/%",parser.p[0]) != NULL) {
+            o = createSymbolObject(parser.p,1);
+            parser.p++;
         } else {
             o = NULL;
         }
@@ -506,6 +503,8 @@ int main(int argc, char **argv) {
     fclose(fp);
 
     tfobj *prg = compile(prgtext);
+    free(prgtext);
+    if (prg == NULL) return 1;
     printObject(prg);
     printf("\n");
 
