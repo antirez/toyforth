@@ -247,7 +247,7 @@ tfobj *parseNumber(tfparser *parser) {
     char *start = parser->p;
     char *end;
 
-    if (parser->p[0] == '-') parser->p++;
+    if (parser->p[0] == '-' || parser->p[0] == '+') parser->p++;
     while(parser->p[0] && isdigit(parser->p[0])) parser->p++;
     end = parser->p;
     int numlen = end-start;
@@ -294,8 +294,11 @@ tfobj *compile(char *prg) {
         parseSpaces(&parser);
         if (parser.p[0] == 0) break; // End of program reached.
 
+        /* A sign starts a number only at the start or after whitespace. */
         if (isdigit(parser.p[0]) ||
-            (parser.p[0] == '-' && isdigit(parser.p[1])))
+            ((parser.p[0] == '-' || parser.p[0] == '+') &&
+             isdigit(parser.p[1]) &&
+             (parser.p == parser.prg || isspace(parser.p[-1]))))
         {
             o = parseNumber(&parser);
         } else if(is_symbol_char(parser.p[0])) {
