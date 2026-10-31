@@ -88,6 +88,7 @@ int setFunction(tfctx *ctx, char *name);
 int lenFunction(tfctx *ctx, char *name);
 int swapFunction(tfctx *ctx, char *name);
 int dropFunction(tfctx *ctx, char *name);
+int emitFunction(tfctx *ctx, char *name);
 
 // user-defined functions
 void registerUserFunction(tfctx *ctx, const tffuncentry *function);
@@ -486,6 +487,7 @@ tfctx *createContext(void) {
     registerCFunction(ctx,"len",lenFunction);
     registerCFunction(ctx,"swap",swapFunction);
     registerCFunction(ctx,"drop",dropFunction);
+    registerCFunction(ctx,"emit",emitFunction);
     return ctx;
 }
 
@@ -806,6 +808,19 @@ int dropFunction(tfctx *ctx, char *name) {
     if (o == NULL) return TF_ERR;
     release(o);
     return TF_OK;
+}
+
+int emitFunction(tfctx *ctx, char *name) {
+    (void)name;
+    tfobj *o = ctxStackPop(ctx,TFOBJ_TYPE_INT);
+    if (o == NULL) return TF_ERR;
+    if (o->i < 0 || o->i > UCHAR_MAX) {
+        ctxStackPush(ctx,o);
+        return TF_ERR;
+    }
+    int result = putchar(o->i) == EOF ? TF_ERR : TF_OK;
+    release(o);
+    return result;
 }
 
 /* ================================== Main ================================== */
