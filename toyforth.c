@@ -65,6 +65,7 @@ void release(tfobj *o);
 
 // Standard library prototypes.
 int basicMathFunctions(tfctx *ctx, char *name);
+int dupFunction(tfctx *ctx, char *name);
 
 /* ============================ Allocation wrappers ========================= */
 
@@ -395,6 +396,7 @@ tfctx *createContext(void) {
     ctx->functable.func_table = NULL;
     ctx->functable.func_count = 0;
     registerCFunction(ctx,"+",basicMathFunctions);
+    registerCFunction(ctx,"dup",dupFunction);
     return ctx;
 }
 
@@ -458,6 +460,16 @@ int basicMathFunctions(tfctx *ctx, char *name) {
     release(b);
 
     ctxStackPush(ctx,createIntObject(result));
+    return TF_OK;
+}
+
+int dupFunction(tfctx *ctx, char *name) {
+    (void)name;
+    tfobj *o = ctxStackPop(ctx,TFOBJ_TYPE_ALL);
+    if (o == NULL) return TF_ERR;
+    retain(o);
+    ctxStackPush(ctx,o);
+    ctxStackPush(ctx,o);
     return TF_OK;
 }
 

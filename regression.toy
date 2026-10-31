@@ -28,9 +28,16 @@
 9
 +
 
+42 dup
+-7 dup
+0 dup
+21 dup +
+3 dup dup + +
+10 20 dup +
+
 abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ MixedCase
 _ __ _123 _name name_ name123 name_123 Name_123
-true false dup drop swap over rot
+true false drop swap over rot
 + - * / %
 ++ -- ** // %% +-*/%
 foo+bar left-right times* divide/ mod%
