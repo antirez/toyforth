@@ -549,8 +549,38 @@ int pushLoopIndex(tfctx *ctx, size_t depth) {
     return TF_OK;
 }
 
-/* Dispatch a symbol to loop control or a registered function. */
-int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base, size_t *pos) {
+/* Skip to the next else or then belonging to the current if. */
+int skipBranch(tfobj *prg, size_t *pos, size_t *if_depth) {
+    int depth = 1;
+    for(size_t end = *pos+1; end < prg->list.len; end++) {
+        tfobj *word = prg->list.ele[end];
+        if (word->type != TFOBJ_TYPE_SYMBOL) continue;
+        char *name = word->str.ptr;
+        if (strcmp(name,"if") == 0) depth++;
+        if (strcmp(name,"then") == 0) depth--;
+        if (depth == 0 || (depth == 1 && strcmp(name,"else") == 0)) {
+            *pos = end;
+            if (depth == 0) (*if_depth)--;
+            return TF_OK;
+        }
+    }
+    return TF_ERR;
+}
+
+/* Consume an integer flag: zero skips the true branch. */
+int startIf(tfctx *ctx, tfobj *prg, size_t *pos, size_t *if_depth) {
+    tfobj *flag = ctxStackPop(ctx,TFOBJ_TYPE_INT);
+    if (flag == NULL) return TF_ERR;
+    int condition = flag->i;
+    release(flag);
+    (*if_depth)++;
+    if (condition == 0) return skipBranch(prg,pos,if_depth);
+    return TF_OK;
+}
+
+/* Dispatch a symbol to control flow or a registered function. */
+int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
+               size_t *if_depth, size_t *pos) {
     tfobj *word = prg->list.ele[*pos];
     char *name = word->str.ptr;
     if (strcmp(name,"do") == 0) {
@@ -561,6 +591,15 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base, size_t *pos) {
                strcmp(name,"j") == 0 || strcmp(name,"k") == 0)
     {
         return pushLoopIndex(ctx,name[0]-'i'+1);
+    } else if (strcmp(name,"if") == 0) {
+        return startIf(ctx,prg,pos,if_depth);
+    } else if (strcmp(name,"else") == 0) {
+        if (*if_depth == 0) return TF_ERR;
+        return skipBranch(prg,pos,if_depth);
+    } else if (strcmp(name,"then") == 0) {
+        if (*if_depth == 0) return TF_ERR;
+        (*if_depth)--;
+        return TF_OK;
     } else {
         return callSymbol(ctx,word);
     }
@@ -570,18 +609,19 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base, size_t *pos) {
 int exec(tfctx *ctx, tfobj *prg) {
     assert(prg->type == TFOBJ_TYPE_LIST);
     size_t loop_base = ctx->looplist.count;
+    size_t if_depth = 0;
     int result = TF_OK;
     for(size_t pos = 0; pos < prg->list.len; pos++) {
         tfobj *word = prg->list.ele[pos];
         if (word->type == TFOBJ_TYPE_SYMBOL) {
-            result = execSymbol(ctx,prg,loop_base,&pos);
+            result = execSymbol(ctx,prg,loop_base,&if_depth,&pos);
             if (result == TF_ERR) break;
         } else {
             ctxStackPush(ctx,word);
             retain(word);
         }
     }
-    if (ctx->looplist.count != loop_base) result = TF_ERR;
+    if (if_depth || ctx->looplist.count != loop_base) result = TF_ERR;
     /* A called function leaves the caller's loop records intact. */
     ctx->looplist.count = loop_base;
     if (result == TF_ERR) printf("Run time error\n");
