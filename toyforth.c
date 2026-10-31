@@ -83,6 +83,7 @@ int dupFunction(tfctx *ctx, char *name);
 int overFunction(tfctx *ctx, char *name);
 int listFunction(tfctx *ctx, char *name);
 int pickFunction(tfctx *ctx, char *name);
+int getFunction(tfctx *ctx, char *name);
 
 // user-defined functions
 void registerUserFunction(tfctx *ctx, const tffuncentry *function);
@@ -476,6 +477,7 @@ tfctx *createContext(void) {
     registerCFunction(ctx,"over",overFunction);
     registerCFunction(ctx,"list",listFunction);
     registerCFunction(ctx,"pick",pickFunction);
+    registerCFunction(ctx,"get",getFunction);
     return ctx;
 }
 
@@ -727,6 +729,24 @@ int pickFunction(tfctx *ctx, char *name) {
     retain(o);
     release(depth);
     ctxStackPush(ctx,o);
+    return TF_OK;
+}
+
+/* ( list index -- value ) */
+int getFunction(tfctx *ctx, char *name) {
+    (void)name;
+    if (ctxCheckStackMinLen(ctx,2)) return TF_ERR;
+    tfobj *stack = ctx->stack;
+    tfobj *index = stack->list.ele[stack->list.len-1];
+    tfobj *list = stack->list.ele[stack->list.len-2];
+    if (index->type != TFOBJ_TYPE_INT || list->type != TFOBJ_TYPE_LIST ||
+        index->i < 0 || (size_t)index->i >= list->list.len) return TF_ERR;
+    tfobj *value = list->list.ele[index->i];
+    retain(value);
+    stack->list.ele[stack->list.len-2] = value;
+    stack->list.len--;
+    release(index);
+    release(list);
     return TF_OK;
 }
 
