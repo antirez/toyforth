@@ -35,6 +35,35 @@
 3 dup dup + +
 10 20 dup +
 
+10 3 -
+3 10 -
+-7 3 -
+7 -3 -
+
+7 3 *
+-7 3 *
+-7 -3 *
+0 3 *
+5 dup *
+
+7 3 /
+-7 3 /
+7 -3 /
+-7 -3 /
+6 3 /
+0 3 /
+
+7 3 %
+-7 3 %
+7 -3 %
+-7 -3 %
+6 3 %
+0 3 %
+
+10 3 - 2 * 5 /
+8 3/
+8 3%
+
 abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ MixedCase
 _ __ _123 _name name_ name123 name_123 Name_123
 true false drop swap over rot

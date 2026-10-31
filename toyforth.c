@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
+#include <limits.h>
 
 /* =============================== Data structrues ========================== */
 
@@ -396,6 +397,10 @@ tfctx *createContext(void) {
     ctx->functable.func_table = NULL;
     ctx->functable.func_count = 0;
     registerCFunction(ctx,"+",basicMathFunctions);
+    registerCFunction(ctx,"-",basicMathFunctions);
+    registerCFunction(ctx,"*",basicMathFunctions);
+    registerCFunction(ctx,"/",basicMathFunctions);
+    registerCFunction(ctx,"%",basicMathFunctions);
     registerCFunction(ctx,"dup",dupFunction);
     return ctx;
 }
@@ -446,11 +451,21 @@ int basicMathFunctions(tfctx *ctx, char *name) {
         return TF_ERR;
     }
 
+    if ((name[0] == '/' || name[0] == '%') &&
+        (b->i == 0 || (a->i == INT_MIN && b->i == -1)))
+    {
+        ctxStackPush(ctx,a);
+        ctxStackPush(ctx,b);
+        return TF_ERR;
+    }
+
     int result;
     switch(name[0]) {
     case '+': result = a->i + b->i; break;
     case '-': result = a->i - b->i; break;
     case '*': result = a->i * b->i; break;
+    case '/': result = a->i / b->i; break;
+    case '%': result = a->i % b->i; break;
     default:
         ctxStackPush(ctx,a);
         ctxStackPush(ctx,b);
