@@ -85,6 +85,7 @@ int listFunction(tfctx *ctx, char *name);
 int pickFunction(tfctx *ctx, char *name);
 int getFunction(tfctx *ctx, char *name);
 int setFunction(tfctx *ctx, char *name);
+int lenFunction(tfctx *ctx, char *name);
 
 // user-defined functions
 void registerUserFunction(tfctx *ctx, const tffuncentry *function);
@@ -480,6 +481,7 @@ tfctx *createContext(void) {
     registerCFunction(ctx,"pick",pickFunction);
     registerCFunction(ctx,"get",getFunction);
     registerCFunction(ctx,"set",setFunction);
+    registerCFunction(ctx,"len",lenFunction);
     return ctx;
 }
 
@@ -767,6 +769,19 @@ int setFunction(tfctx *ctx, char *name) {
     stack->list.len -= 3;
     release(old);
     release(index);
+    release(list);
+    return TF_OK;
+}
+
+/* ( list -- count ) */
+int lenFunction(tfctx *ctx, char *name) {
+    (void)name;
+    if (ctxCheckStackMinLen(ctx,1)) return TF_ERR;
+    tfobj *stack = ctx->stack;
+    tfobj *list = stack->list.ele[stack->list.len-1];
+    if (list->type != TFOBJ_TYPE_LIST || list->list.len > INT_MAX)
+        return TF_ERR;
+    stack->list.ele[stack->list.len-1] = createIntObject((int)list->list.len);
     release(list);
     return TF_OK;
 }
