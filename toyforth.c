@@ -357,42 +357,32 @@ tffuncentry *getFunctionByName(tfctx *ctx, tfobj *name) {
     return NULL;
 }
 
-/* Push a new function entry in the context. It's up to the caller
- * to set either the C callback or the list representing the user
- * defined function. */
-tffuncentry *registerFunction(tfctx *ctx, tfobj *name) {
+/* Find or create a table entry. The context retains its name. */
+tffuncentry *getOrCreateFunction(tfctx *ctx, tfobj *name) {
+    tffuncentry *fe = getFunctionByName(ctx,name);
+    if (fe) return fe;
+
     ctx->functable.func_table =
         xrealloc(ctx->functable.func_table,
                  sizeof(tffuncentry*) * (ctx->functable.func_count+1));
-    tffuncentry *fe = xmalloc(sizeof(tffuncentry));
-    ctx->functable.func_table[ctx->functable.func_count] = fe;
-    ctx->functable.func_count++;
+    fe = xmalloc(sizeof(tffuncentry));
     fe->name = name;
     retain(name);
     fe->callback = NULL;
     fe->user_func = NULL;
+    ctx->functable.func_table[ctx->functable.func_count++] = fe;
     return fe;
 }
 
-/* Register a new function with the given name in the function table
- * of the context. The function can't fail since if a function with the
- * same name already exist, it gets replaced by the new one. */
+/* Register a built-in callback, replacing any previous implementation. */
 void registerCFunction(tfctx *ctx, char *name,
                        int (*callback) (tfctx *ctx, char *name))
 {
-    tffuncentry *fe;
     tfobj *oname = createStringObject(name, strlen(name));
-    fe = getFunctionByName(ctx,oname);
-    if (fe) {
-        if (fe->user_func) {
-            release(fe->user_func);
-            fe->user_func = NULL;
-        }
-        fe->callback = callback;
-    } else {
-        fe = registerFunction(ctx,oname);
-        fe->callback = callback;
-    }
+    tffuncentry *fe = getOrCreateFunction(ctx,oname);
+    if (fe->user_func) release(fe->user_func);
+    fe->user_func = NULL;
+    fe->callback = callback;
     release(oname);
 }
 
