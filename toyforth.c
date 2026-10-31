@@ -53,10 +53,23 @@ struct FunctionTable {
     size_t func_count;
 };
 
+typedef struct Loop {
+    int index;
+    int limit;
+    size_t start;
+} tfloop;
+
+/* Active loops, ordered from outermost to innermost. */
+typedef struct LoopList {
+    tfloop *loops;
+    size_t count;
+} tflooplist;
+
 /* Our execution context. */
 typedef struct tfctx {
     tfobj *stack;
     struct FunctionTable functable;
+    struct LoopList looplist;
 } tfctx;
 
 /* ========================== Function prototypes =========================== */
@@ -447,6 +460,8 @@ void registerUserFunction(tfctx *ctx, const tffuncentry *function) {
 tfctx *createContext(void) {
     tfctx *ctx = xmalloc(sizeof(*ctx));
     ctx->stack = createListObject();
+    ctx->looplist.loops = NULL;
+    ctx->looplist.count = 0;
     ctx->functable.func_table = NULL;
     ctx->functable.func_count = 0;
     registerCFunction(ctx,"+",basicMathFunctions);
@@ -472,25 +487,105 @@ int callSymbol(tfctx *ctx, tfobj *word) {
     }
 }
 
+/* Find the matching loop without executing the body. */
+int skipLoop(tfobj *prg, size_t *pos) {
+    int depth = 1;
+    for(size_t end = *pos+1; end < prg->list.len; end++) {
+        tfobj *word = prg->list.ele[end];
+        if (word->type != TFOBJ_TYPE_SYMBOL) continue;
+        if (strcmp(word->str.ptr,"do") == 0) depth++;
+        if (strcmp(word->str.ptr,"loop") == 0) depth--;
+        if (depth == 0) {
+            *pos = end;
+            return TF_OK;
+        }
+    }
+    return TF_ERR;
+}
+
+/* Consume the bounds, then enter the loop or skip it when they are equal. */
+int startLoop(tfctx *ctx, tfobj *prg, size_t *pos) {
+    tfobj *limit = ctxStackPop(ctx,TFOBJ_TYPE_INT);
+    if (limit == NULL) return TF_ERR;
+    tfobj *start = ctxStackPop(ctx,TFOBJ_TYPE_INT);
+    if (start == NULL) {
+        ctxStackPush(ctx,limit);
+        return TF_ERR;
+    }
+
+    int result = TF_OK;
+    if (start->i == limit->i) {
+        result = skipLoop(prg,pos);
+    } else {
+        tflooplist *list = &ctx->looplist;
+        list->loops = xrealloc(list->loops,sizeof(tfloop) * (list->count+1));
+        tfloop *loop = &list->loops[list->count++];
+        loop->index = start->i;
+        loop->limit = limit->i;
+        loop->start = *pos;
+    }
+    release(start);
+    release(limit);
+    return result;
+}
+
+/* Advance the counter, then repeat the body or discard the completed loop. */
+int advanceLoop(tfctx *ctx, size_t loop_base, size_t *pos) {
+    tflooplist *list = &ctx->looplist;
+    if (list->count == loop_base) return TF_ERR;
+    tfloop *loop = &list->loops[list->count-1];
+    loop->index += loop->index < loop->limit ? 1 : -1;
+    if (loop->index != loop->limit) *pos = loop->start;
+    else list->count--;
+    return TF_OK;
+}
+
+/* Push a snapshot: depth 1 is i, depth 2 is j, depth 3 is k. */
+int pushLoopIndex(tfctx *ctx, size_t depth) {
+    tflooplist *list = &ctx->looplist;
+    if (list->count < depth) return TF_ERR;
+    tfloop *loop = &list->loops[list->count-depth];
+    ctxStackPush(ctx,createIntObject(loop->index));
+    return TF_OK;
+}
+
+/* Dispatch a symbol to loop control or a registered function. */
+int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base, size_t *pos) {
+    tfobj *word = prg->list.ele[*pos];
+    char *name = word->str.ptr;
+    if (strcmp(name,"do") == 0) {
+        return startLoop(ctx,prg,pos);
+    } else if (strcmp(name,"loop") == 0) {
+        return advanceLoop(ctx,loop_base,pos);
+    } else if (strcmp(name,"i") == 0 ||
+               strcmp(name,"j") == 0 || strcmp(name,"k") == 0)
+    {
+        return pushLoopIndex(ctx,name[0]-'i'+1);
+    } else {
+        return callSymbol(ctx,word);
+    }
+}
+
 /* Execute the Toy Forth program stored into the list 'prg'. */
 int exec(tfctx *ctx, tfobj *prg) {
     assert(prg->type == TFOBJ_TYPE_LIST);
-    for(size_t j = 0; j < prg->list.len; j++) {
-        tfobj *word = prg->list.ele[j];
-        switch(word->type) {
-        case TFOBJ_TYPE_SYMBOL:
-            if (callSymbol(ctx, word) == TF_ERR) {
-                printf("Run time error\n");
-                return TF_ERR;
-            }
-            break;
-        default:
+    size_t loop_base = ctx->looplist.count;
+    int result = TF_OK;
+    for(size_t pos = 0; pos < prg->list.len; pos++) {
+        tfobj *word = prg->list.ele[pos];
+        if (word->type == TFOBJ_TYPE_SYMBOL) {
+            result = execSymbol(ctx,prg,loop_base,&pos);
+            if (result == TF_ERR) break;
+        } else {
             ctxStackPush(ctx,word);
             retain(word);
-            break;
         }
     }
-    return TF_OK;
+    if (ctx->looplist.count != loop_base) result = TF_ERR;
+    /* A called function leaves the caller's loop records intact. */
+    ctx->looplist.count = loop_base;
+    if (result == TF_ERR) printf("Run time error\n");
+    return result;
 }
 
 /* ======================== Basic standard library ========================== */
