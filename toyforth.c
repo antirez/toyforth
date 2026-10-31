@@ -119,6 +119,7 @@ void freeObject(tfobj *o) {
             tfobj *ele = o->list.ele[j];
             release(ele);
         }
+        free(o->list.ele);
         break;
     case TFOBJ_TYPE_SYMBOL:
     case TFOBJ_TYPE_STR:
