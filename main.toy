@@ -1,1 +1,2 @@
-foo bar
+: cube dup dup * *;
+3 cube;

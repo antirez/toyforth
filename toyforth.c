@@ -71,6 +71,9 @@ int dupFunction(tfctx *ctx, char *name);
 // user-defined functions
 void registerUserFunction(tfctx *ctx, const tffuncentry *function);
 
+// exec user-defined function
+int exec(tfctx *ctx, tfobj *prg);
+
 /* ============================ Allocation wrappers ========================= */
 
 void *xmalloc(size_t size) {
@@ -461,8 +464,7 @@ int callSymbol(tfctx *ctx, tfobj *word) {
     tffuncentry *fe = getFunctionByName(ctx,word);
     if (fe == NULL) return TF_ERR;
     if (fe->user_func) {
-        // TODO
-        return TF_ERR;
+        return exec(ctx,fe->user_func);
     } else {
         return fe->callback(ctx, fe->name->str.ptr);
     }
