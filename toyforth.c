@@ -294,7 +294,7 @@ tfobj *compile(char *prg) {
             continue;
         }
 
-        /* A sign starts a number only at the start or after a separator. */
+        /* A sign starts a number only at the start or after a separator or whitespace. */
         if (isdigit(parser.p[0]) ||
             ((parser.p[0] == '-' || parser.p[0] == '+') &&
              isdigit(parser.p[1]) &&
