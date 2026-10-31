@@ -2,3 +2,5 @@
 : square dup * ;
 : _add_2 2 + ;
 : empty ;
+
+3 cube;
