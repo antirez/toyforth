@@ -1,0 +1,66 @@
+: n 0 get ;
+: a 1 get ;
+: q 2 get ;
+: x 3 get ;
+: nines 4 get ;
+: predigit 5 get ;
+: first 6 get ;
+
+: write_digit
+    over first if
+        drop
+        0 over 6 set
+    else
+        48 + emit
+    then
+;
+
+: refine_digit
+    0 over 2 set
+    dup a len 0 do
+        dup a i 1 - get 10 *
+        over q i * +
+        over 3 set
+
+        dup x i 2 * 1 - %
+        over a i 1 - set
+
+        dup x i 2 * 1 - /
+        over 2 set
+    loop
+    dup q 10 % over a 0 set
+    dup q 10 / over 2 set
+;
+
+: pi_digits
+    0 7 list
+    swap over 0 set
+    2 over n 10 * 3 / 1 + list
+    over 1 set
+    1 over 6 set
+
+    0 over n do
+        refine_digit
+        dup q 9 = if
+            dup nines 1 + over 4 set
+        else
+            dup q 10 = if
+                dup predigit 1 + write_digit
+                0 over nines do 0 write_digit loop
+                0 over 5 set
+                0 over 4 set
+            else
+                dup predigit write_digit
+                dup q over 5 set
+                0 over nines do 9 write_digit loop
+                0 over 4 set
+            then
+        then
+    loop
+    dup predigit write_digit
+    0 over nines do 9 write_digit loop
+    drop
+;
+
+10 pi_digits
+10 emit
