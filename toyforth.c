@@ -449,6 +449,10 @@ int basicMathFunctions(tfctx *ctx, char *name) {
     case '+': result = a->i + b->i; break;
     case '-': result = a->i - b->i; break;
     case '*': result = a->i * b->i; break;
+    default:
+        ctxStackPush(ctx,a);
+        ctxStackPush(ctx,b);
+        return TF_ERR;
     }
     release(a);
     release(b);
@@ -472,11 +476,29 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    fseek(fp,0,SEEK_END);
+    if (fseek(fp,0,SEEK_END) != 0) {
+        perror("Seeking Toy Forth program");
+        fclose(fp);
+        return 1;
+    }
     long file_size = ftell(fp);
+    if (file_size == -1) {
+        perror("Getting Toy Forth program size");
+        fclose(fp);
+        return 1;
+    }
+    if (fseek(fp,0,SEEK_SET) != 0) {
+        perror("Seeking Toy Forth program");
+        fclose(fp);
+        return 1;
+    }
     char *prgtext = xmalloc(file_size+1);
-    fseek(fp,0,SEEK_SET);
-    fread(prgtext,file_size,1,fp);
+    if (fread(prgtext,1,file_size,fp) != (size_t)file_size) {
+        fprintf(stderr,"Error reading Toy Forth program\n");
+        free(prgtext);
+        fclose(fp);
+        return 1;
+    }
     prgtext[file_size] = 0;
     fclose(fp);
 
