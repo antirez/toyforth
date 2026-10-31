@@ -67,6 +67,7 @@ void release(tfobj *o);
 // Standard library prototypes.
 int basicMathFunctions(tfctx *ctx, char *name);
 int dupFunction(tfctx *ctx, char *name);
+int overFunction(tfctx *ctx, char *name);
 
 // user-defined functions
 void registerUserFunction(tfctx *ctx, const tffuncentry *function);
@@ -454,6 +455,7 @@ tfctx *createContext(void) {
     registerCFunction(ctx,"/",basicMathFunctions);
     registerCFunction(ctx,"%",basicMathFunctions);
     registerCFunction(ctx,"dup",dupFunction);
+    registerCFunction(ctx,"over",overFunction);
     return ctx;
 }
 
@@ -535,6 +537,15 @@ int dupFunction(tfctx *ctx, char *name) {
     if (o == NULL) return TF_ERR;
     retain(o);
     ctxStackPush(ctx,o);
+    ctxStackPush(ctx,o);
+    return TF_OK;
+}
+
+int overFunction(tfctx *ctx, char *name) {
+    (void)name;
+    if (ctxCheckStackMinLen(ctx,2)) return TF_ERR;
+    tfobj *o = ctx->stack->list.ele[ctx->stack->list.len-2];
+    retain(o);
     ctxStackPush(ctx,o);
     return TF_OK;
 }
