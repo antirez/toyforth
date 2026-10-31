@@ -81,6 +81,7 @@ void release(tfobj *o);
 int basicMathFunctions(tfctx *ctx, char *name);
 int dupFunction(tfctx *ctx, char *name);
 int overFunction(tfctx *ctx, char *name);
+int listFunction(tfctx *ctx, char *name);
 
 // user-defined functions
 void registerUserFunction(tfctx *ctx, const tffuncentry *function);
@@ -472,6 +473,7 @@ tfctx *createContext(void) {
     registerCFunction(ctx,"=",basicMathFunctions);
     registerCFunction(ctx,"dup",dupFunction);
     registerCFunction(ctx,"over",overFunction);
+    registerCFunction(ctx,"list",listFunction);
     return ctx;
 }
 
@@ -684,6 +686,28 @@ int overFunction(tfctx *ctx, char *name) {
     tfobj *o = ctx->stack->list.ele[ctx->stack->list.len-2];
     retain(o);
     ctxStackPush(ctx,o);
+    return TF_OK;
+}
+
+/* ( value count -- list ) */
+int listFunction(tfctx *ctx, char *name) {
+    (void)name;
+    if (ctxCheckStackMinLen(ctx,2)) return TF_ERR;
+    tfobj *count = ctxStackPop(ctx,TFOBJ_TYPE_INT);
+    if (count == NULL) return TF_ERR;
+    if (count->i < 0) {
+        ctxStackPush(ctx,count);
+        return TF_ERR;
+    }
+    tfobj *value = ctxStackPop(ctx,TFOBJ_TYPE_ALL);
+    tfobj *list = createListObject();
+    for(int i = 0; i < count->i; i++) {
+        retain(value);
+        listPush(list,value);
+    }
+    release(value);
+    release(count);
+    ctxStackPush(ctx,list);
     return TF_OK;
 }
 
