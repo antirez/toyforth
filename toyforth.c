@@ -566,6 +566,17 @@ int pushLoopIndex(tfctx *ctx, size_t depth) {
     return TF_OK;
 }
 
+/* Consume an integer flag: zero skips the true branch. */
+int startIf(tfctx *ctx, tfobj *prg, size_t *pos, size_t *if_depth) {
+    tfobj *flag = ctxStackPop(ctx,TFOBJ_TYPE_INT);
+    if (flag == NULL) return TF_ERR;
+    int condition = flag->i;
+    release(flag);
+    (*if_depth)++;
+    if (condition == 0) return skipBranch(prg,pos,if_depth);
+    return TF_OK;
+}
+
 /* Skip to the next else or then belonging to the current if. */
 int skipBranch(tfobj *prg, size_t *pos, size_t *if_depth) {
     int depth = 1;
@@ -582,17 +593,6 @@ int skipBranch(tfobj *prg, size_t *pos, size_t *if_depth) {
         }
     }
     return TF_ERR;
-}
-
-/* Consume an integer flag: zero skips the true branch. */
-int startIf(tfctx *ctx, tfobj *prg, size_t *pos, size_t *if_depth) {
-    tfobj *flag = ctxStackPop(ctx,TFOBJ_TYPE_INT);
-    if (flag == NULL) return TF_ERR;
-    int condition = flag->i;
-    release(flag);
-    (*if_depth)++;
-    if (condition == 0) return skipBranch(prg,pos,if_depth);
-    return TF_OK;
 }
 
 /* Dispatch a symbol to control flow or a registered function. */
