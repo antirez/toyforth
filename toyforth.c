@@ -309,7 +309,7 @@ tfobj *parseToken(tfparser *parser) {
         return parseNumber(parser);
     } else if(isalpha((unsigned char)parser->p[0]) || parser->p[0] == '_') {
         return parseSymbol(parser);
-    } else if(parser->p[0] && strchr("+-*/%",parser->p[0]) != NULL) {
+    } else if(parser->p[0] && strchr("+-*/%=",parser->p[0]) != NULL) {
         tfobj *o = createSymbolObject(parser->p,1);
         parser->p++;
         return o;
@@ -469,6 +469,7 @@ tfctx *createContext(void) {
     registerCFunction(ctx,"*",basicMathFunctions);
     registerCFunction(ctx,"/",basicMathFunctions);
     registerCFunction(ctx,"%",basicMathFunctions);
+    registerCFunction(ctx,"=",basicMathFunctions);
     registerCFunction(ctx,"dup",dupFunction);
     registerCFunction(ctx,"over",overFunction);
     return ctx;
@@ -654,6 +655,7 @@ int basicMathFunctions(tfctx *ctx, char *name) {
     case '*': result = a->i * b->i; break;
     case '/': result = a->i / b->i; break;
     case '%': result = a->i % b->i; break;
+    case '=': result = a->i == b->i; break;
     default:
         ctxStackPush(ctx,a);
         ctxStackPush(ctx,b);
