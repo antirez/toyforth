@@ -1,0 +1,4 @@
+: cube dup dup * * ;;;;
+: square dup * ;
+: _add_2 2 + ;
+: empty ;

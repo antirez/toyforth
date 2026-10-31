@@ -68,6 +68,9 @@ void release(tfobj *o);
 int basicMathFunctions(tfctx *ctx, char *name);
 int dupFunction(tfctx *ctx, char *name);
 
+// user-defined functions
+void registerUserFunction(tfctx *ctx, const tffuncentry *function);
+
 /* ============================ Allocation wrappers ========================= */
 
 void *xmalloc(size_t size) {
@@ -298,7 +301,36 @@ tfobj *parseToken(tfparser *parser) {
     }
 }
 
-tfobj *compile(char *prg) {
+/* Read and register one definition, without executing its body. */
+int parseUserFunction(tfctx *ctx, tfparser *parser) {
+    parser->p++; // Skip ':'.
+    parseSpaces(parser);
+    if (!isalpha((unsigned char)parser->p[0]) && parser->p[0] != '_')
+        return TF_ERR;
+
+    tffuncentry function;
+    function.name = parseSymbol(parser);
+    function.user_func = createListObject();
+    int result = TF_ERR;
+
+    while(parser->p[0]) {
+        parseSpaces(parser);
+        if (parser->p[0] == ';') {
+            parser->p++;
+            registerUserFunction(ctx,&function);
+            result = TF_OK;
+            break;
+        }
+        tfobj *o = parseToken(parser);
+        if (o == NULL) break;
+        listPush(function.user_func,o);
+    }
+    release(function.name);
+    release(function.user_func);
+    return result;
+}
+
+tfobj *compile(tfctx *ctx, char *prg) {
     tfparser parser;
     parser.prg = prg;
     parser.p = prg;
@@ -306,7 +338,6 @@ tfobj *compile(char *prg) {
     tfobj *parsed = createListObject();
 
     while(parser.p) {
-        tfobj *o;
         char *token_start = parser.p;
 
         parseSpaces(&parser);
@@ -315,9 +346,16 @@ tfobj *compile(char *prg) {
             parser.p++;
             continue;
         }
+        if (parser.p[0] == ':') {
+            if (parseUserFunction(ctx,&parser) == TF_ERR) {
+                release(parsed);
+                printf("Syntax error near: %32s ...\n", token_start);
+                return NULL;
+            }
+            continue;
+        }
 
-        o = parseToken(&parser);
-
+        tfobj *o = parseToken(&parser);
         // Check if the current token produced a parsing error.
         if (o == NULL) {
             release(parsed);
@@ -391,6 +429,15 @@ void registerCFunction(tfctx *ctx, char *name,
     fe->user_func = NULL;
     fe->callback = callback;
     release(oname);
+}
+
+/* Register a user body. The context retains it; the caller keeps its reference. */
+void registerUserFunction(tfctx *ctx, const tffuncentry *function) {
+    retain(function->user_func);
+    tffuncentry *fe = getOrCreateFunction(ctx,function->name);
+    if (fe->user_func) release(fe->user_func);
+    fe->user_func = function->user_func;
+    fe->callback = NULL;
 }
 
 tfctx *createContext(void) {
@@ -531,13 +578,13 @@ int main(int argc, char **argv) {
     prgtext[file_size] = 0;
     fclose(fp);
 
-    tfobj *prg = compile(prgtext);
+    tfctx *ctx = createContext();
+    tfobj *prg = compile(ctx,prgtext);
     free(prgtext);
     if (prg == NULL) return 1;
     printObject(prg);
     printf("\n");
 
-    tfctx *ctx = createContext();
     exec(ctx,prg);
 
     printf("Stack content at end: ");

@@ -72,12 +72,10 @@
 ;-7;2;+;
 ;+42;dup;+;;;;
 
-abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ MixedCase
-_ __ _123 _name name_ name123 name_123 Name_123
-true false drop swap over rot
-+ - * / %
-++ -- ** // %% +-*/%
-foo+bar left-right times* divide/ mod%
-word123 a-1
-10-3 -2-3 10+3
-+42 --42
+: cube dup dup * * ;;;;
+: empty ;
+: _add_2 2 + ;
+: signed_values -7 +42 ;
+: forward_ref cube ;
+: replace_me 1 ;
+: replace_me 2 ;
