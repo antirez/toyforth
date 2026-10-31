@@ -5,6 +5,7 @@
 #include <string.h>
 #include <assert.h>
 #include <limits.h>
+#include <time.h>
 
 /* =============================== Data structrues ========================== */
 
@@ -46,6 +47,8 @@ typedef struct FunctionTableEntry {
     tfobj *name;
     int (*callback) (struct tfctx *ctx, char *name);
     tfobj *user_func;
+    size_t call_count;
+    double total_ms;
 } tffuncentry;
 
 struct FunctionTable {
@@ -70,6 +73,7 @@ typedef struct tfctx {
     tfobj *stack;
     struct FunctionTable functable;
     struct LoopList looplist;
+    int profile;
 } tfctx;
 
 /* ========================== Function prototypes =========================== */
@@ -440,6 +444,8 @@ tffuncentry *getOrCreateFunction(tfctx *ctx, tfobj *name) {
     retain(name);
     fe->callback = NULL;
     fe->user_func = NULL;
+    fe->call_count = 0;
+    fe->total_ms = 0;
     ctx->functable.func_table[ctx->functable.func_count++] = fe;
     return fe;
 }
@@ -468,6 +474,7 @@ void registerUserFunction(tfctx *ctx, const tffuncentry *function) {
 tfctx *createContext(void) {
     tfctx *ctx = xmalloc(sizeof(*ctx));
     ctx->stack = createListObject();
+    ctx->profile = 0;
     ctx->looplist.loops = NULL;
     ctx->looplist.count = 0;
     ctx->functable.func_table = NULL;
@@ -496,7 +503,7 @@ tfctx *createContext(void) {
  * function and was executed, return 1 otherwise (on error). */
 int callSymbol(tfctx *ctx, tfobj *word) {
     tffuncentry *fe = getFunctionByName(ctx,word);
-    if (fe == NULL) return TF_ERR;
+    if (fe == NULL || (fe->callback == NULL && fe->user_func == NULL)) return TF_ERR;
     if (fe->user_func) {
         return exec(ctx,fe->user_func);
     } else {
@@ -566,17 +573,6 @@ int pushLoopIndex(tfctx *ctx, size_t depth) {
     return TF_OK;
 }
 
-/* Consume an integer flag: zero skips the true branch. */
-int startIf(tfctx *ctx, tfobj *prg, size_t *pos, size_t *if_depth) {
-    tfobj *flag = ctxStackPop(ctx,TFOBJ_TYPE_INT);
-    if (flag == NULL) return TF_ERR;
-    int condition = flag->i;
-    release(flag);
-    (*if_depth)++;
-    if (condition == 0) return skipBranch(prg,pos,if_depth);
-    return TF_OK;
-}
-
 /* Skip to the next else or then belonging to the current if. */
 int skipBranch(tfobj *prg, size_t *pos, size_t *if_depth) {
     int depth = 1;
@@ -593,6 +589,17 @@ int skipBranch(tfobj *prg, size_t *pos, size_t *if_depth) {
         }
     }
     return TF_ERR;
+}
+
+/* Consume an integer flag: zero skips the true branch. */
+int startIf(tfctx *ctx, tfobj *prg, size_t *pos, size_t *if_depth) {
+    tfobj *flag = ctxStackPop(ctx,TFOBJ_TYPE_INT);
+    if (flag == NULL) return TF_ERR;
+    int condition = flag->i;
+    release(flag);
+    (*if_depth)++;
+    if (condition == 0) return skipBranch(prg,pos,if_depth);
+    return TF_OK;
 }
 
 /* Dispatch a symbol to control flow or a registered function. */
@@ -622,6 +629,38 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
     }
 }
 
+double timeMilliseconds(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC,&now) != 0) {
+        perror("Reading profiling clock");
+        exit(1);
+    }
+    return now.tv_sec * 1000.0 + now.tv_nsec / 1000000.0;
+}
+
+/* Count dispatched words; user-function times include their callees. */
+int profileSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
+                  size_t *if_depth, size_t *pos) {
+    tffuncentry *fe = getOrCreateFunction(ctx,prg->list.ele[*pos]);
+    fe->call_count++;
+    double start = timeMilliseconds();
+    int result = execSymbol(ctx,prg,loop_base,if_depth,pos);
+    fe->total_ms += timeMilliseconds() - start;
+    return result;
+}
+
+void printProfile(tfctx *ctx) {
+    fprintf(stderr,"%-16s %10s %14s %13s\n",
+            "WORD","CALLS","TOTAL (ms)","AVG (µs)");
+    for(size_t j = 0; j < ctx->functable.func_count; j++) {
+        tffuncentry *fe = ctx->functable.func_table[j];
+        if (fe->call_count == 0) continue;
+        fprintf(stderr,"%-16s %10zu %14.3f %12.3f\n",
+                fe->name->str.ptr,fe->call_count,fe->total_ms,
+                fe->total_ms * 1000 / fe->call_count);
+    }
+}
+
 /* Execute the Toy Forth program stored into the list 'prg'. */
 int exec(tfctx *ctx, tfobj *prg) {
     assert(prg->type == TFOBJ_TYPE_LIST);
@@ -631,7 +670,10 @@ int exec(tfctx *ctx, tfobj *prg) {
     for(size_t pos = 0; pos < prg->list.len; pos++) {
         tfobj *word = prg->list.ele[pos];
         if (word->type == TFOBJ_TYPE_SYMBOL) {
-            result = execSymbol(ctx,prg,loop_base,&if_depth,&pos);
+            if (ctx->profile)
+                result = profileSymbol(ctx,prg,loop_base,&if_depth,&pos);
+            else
+                result = execSymbol(ctx,prg,loop_base,&if_depth,&pos);
             if (result == TF_ERR) break;
         } else {
             ctxStackPush(ctx,word);
@@ -826,13 +868,15 @@ int emitFunction(tfctx *ctx, char *name) {
 /* ================================== Main ================================== */
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        fprintf(stderr,"Usage: %s <filename>\n", argv[0]);
+    int profile = argc > 1 &&
+        (strcmp(argv[1],"-p") == 0 || strcmp(argv[1],"--profile") == 0);
+    if (argc != 2 + profile) {
+        fprintf(stderr,"Usage: %s [-p | --profile] <filename>\n", argv[0]);
         return 1;
     }
 
     /* Read the program in memory, for later parsing. */
-    FILE *fp = fopen(argv[1],"r");
+    FILE *fp = fopen(argv[1+profile],"r");
     if (fp == NULL) {
         perror("Opening Toy Forth program");
         return 1;
@@ -865,6 +909,7 @@ int main(int argc, char **argv) {
     fclose(fp);
 
     tfctx *ctx = createContext();
+    ctx->profile = profile;
     tfobj *prg = compile(ctx,prgtext);
     free(prgtext);
     if (prg == NULL) return 1;
@@ -877,5 +922,6 @@ int main(int argc, char **argv) {
     printObject(ctx->stack);
     printf("\n");
 
+    if (ctx->profile) printProfile(ctx);
     return 0;
 }

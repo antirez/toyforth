@@ -62,5 +62,5 @@
     drop
 ;
 
-10 pi_digits
+30 pi_digits
 10 emit
