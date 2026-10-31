@@ -82,6 +82,7 @@ int basicMathFunctions(tfctx *ctx, char *name);
 int dupFunction(tfctx *ctx, char *name);
 int overFunction(tfctx *ctx, char *name);
 int listFunction(tfctx *ctx, char *name);
+int pickFunction(tfctx *ctx, char *name);
 
 // user-defined functions
 void registerUserFunction(tfctx *ctx, const tffuncentry *function);
@@ -474,6 +475,7 @@ tfctx *createContext(void) {
     registerCFunction(ctx,"dup",dupFunction);
     registerCFunction(ctx,"over",overFunction);
     registerCFunction(ctx,"list",listFunction);
+    registerCFunction(ctx,"pick",pickFunction);
     return ctx;
 }
 
@@ -708,6 +710,23 @@ int listFunction(tfctx *ctx, char *name) {
     release(value);
     release(count);
     ctxStackPush(ctx,list);
+    return TF_OK;
+}
+
+/* Copy a stack item: depth 0 is the top, depth 1 is the next. */
+int pickFunction(tfctx *ctx, char *name) {
+    (void)name;
+    tfobj *depth = ctxStackPop(ctx,TFOBJ_TYPE_INT);
+    if (depth == NULL) return TF_ERR;
+    tfobj *stack = ctx->stack;
+    if (depth->i < 0 || (size_t)depth->i >= stack->list.len) {
+        ctxStackPush(ctx,depth);
+        return TF_ERR;
+    }
+    tfobj *o = stack->list.ele[stack->list.len-1-depth->i];
+    retain(o);
+    release(depth);
+    ctxStackPush(ctx,o);
     return TF_OK;
 }
 
