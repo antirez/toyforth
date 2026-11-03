@@ -99,9 +99,10 @@ Enable runtime profiling with `-p` or `--profile`:
 make profile
 ```
 
-Profiling reports call counts, total milliseconds, and average microseconds
-per word to stderr. Function times include their callees. `make profile`
-saves both Pi reports and regenerates the comparison.
+Profiling reports call counts, total elapsed milliseconds, and average
+microseconds per word to stderr. Times include waiting and callees, so rows
+overlap. Self time and call hierarchy are not recorded. `make profile` saves
+both Pi reports and regenerates the comparison.
 
 Saved reports: [pi.toy](profiling/pi.profile.txt) and
 [pi_golf.toy](profiling/pi_golf.profile.txt).

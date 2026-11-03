@@ -8,9 +8,15 @@ Results: [pi.toy](pi.profile.txt), [pi_golf.toy](pi_golf.profile.txt),
 and [word counts as CSV](pi_usage.csv).
 
 Use `./toyforth -p program.toy` or `--profile` for another program. Reports
-go to stderr: word, calls, total milliseconds, and average microseconds.
-Times include callees, so rows overlap. Timings vary with profiling overhead
-and system load.
+go to stderr: word, calls, total elapsed milliseconds, and average microseconds.
+Timing uses the POSIX monotonic clock: elapsed time includes waiting and is
+unaffected by system-clock jumps. Timer resolution and profiling overhead
+limit measurements of short words.
+
+Times are inclusive (cumulative): user-defined words include their callees.
+Results are aggregated per symbol across all callers; the profiler does not
+record call hierarchy or self (exclusive) time. Nested and recursive calls
+overlap, so adding row totals does not give the program's elapsed time.
 
 `profile_pi.py` counts source words and combines the native reports into
 the table and chart below. Counts include operators and control words;

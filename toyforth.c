@@ -1,6 +1,7 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
@@ -47,8 +48,6 @@ typedef struct FunctionTableEntry {
     tfobj *name;
     int (*callback) (struct tfctx *ctx, char *name);
     tfobj *user_func;
-    size_t call_count;
-    double total_ms;
 } tffuncentry;
 
 struct FunctionTable {
@@ -68,12 +67,30 @@ typedef struct LoopList {
     size_t count;
 } tflooplist;
 
+typedef struct {
+    const char *name; /* Borrowed until the program is released. */
+    size_t calls;
+    double total_ms;
+} tfprofileentry;
+
+typedef struct {
+    tfprofileentry *entries;
+    size_t count;
+} tfcallstats;
+
+/* Optional profiling hooks. */
+typedef struct tfprofiler {
+    tfcallstats *stats;
+    double (*clock)(void);
+    void (*record)(tfcallstats *stats, const char *word, double elapsed_ms);
+} tfprofiler;
+
 /* Our execution context. */
 typedef struct tfctx {
     tfobj *stack;
     struct FunctionTable functable;
     struct LoopList looplist;
-    int profile;
+    const tfprofiler *profiler; /* NULL disables profiling. */
 } tfctx;
 
 /* ========================== Function prototypes =========================== */
@@ -97,12 +114,13 @@ int emitFunction(tfctx *ctx, char *name);
 // user-defined functions
 void registerUserFunction(tfctx *ctx, const tffuncentry *function);
 
-// exec user-defined function
+// Execute a program.
 int exec(tfctx *ctx, tfobj *prg);
 
 /* ============================ Allocation wrappers ========================= */
 
 void *xmalloc(size_t size) {
+    if (size == 0) return NULL;
     void *ptr = malloc(size);
     if (ptr == NULL) {
         fprintf(stderr,"Out of memory allocating %zu bytes\n", size);
@@ -112,6 +130,10 @@ void *xmalloc(size_t size) {
 }
 
 void *xrealloc(void *oldptr, size_t size) {
+    if (size == 0) {
+        free(oldptr);
+        return NULL;
+    }
     void *ptr = realloc(oldptr, size);
     if (ptr == NULL) {
         fprintf(stderr,"Out of memory allocating %zu bytes\n", size);
@@ -444,8 +466,6 @@ tffuncentry *getOrCreateFunction(tfctx *ctx, tfobj *name) {
     retain(name);
     fe->callback = NULL;
     fe->user_func = NULL;
-    fe->call_count = 0;
-    fe->total_ms = 0;
     ctx->functable.func_table[ctx->functable.func_count++] = fe;
     return fe;
 }
@@ -474,7 +494,7 @@ void registerUserFunction(tfctx *ctx, const tffuncentry *function) {
 tfctx *createContext(void) {
     tfctx *ctx = xmalloc(sizeof(*ctx));
     ctx->stack = createListObject();
-    ctx->profile = 0;
+    ctx->profiler = NULL;
     ctx->looplist.loops = NULL;
     ctx->looplist.count = 0;
     ctx->functable.func_table = NULL;
@@ -629,51 +649,28 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
     }
 }
 
-double timeMilliseconds(void) {
-    struct timespec now;
-    if (clock_gettime(CLOCK_MONOTONIC,&now) != 0) {
-        perror("Reading profiling clock");
-        exit(1);
-    }
-    return now.tv_sec * 1000.0 + now.tv_nsec / 1000000.0;
-}
-
-/* Count dispatched words; user-function times include their callees. */
-int profileSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
-                  size_t *if_depth, size_t *pos) {
-    tffuncentry *fe = getOrCreateFunction(ctx,prg->list.ele[*pos]);
-    fe->call_count++;
-    double start = timeMilliseconds();
-    int result = execSymbol(ctx,prg,loop_base,if_depth,pos);
-    fe->total_ms += timeMilliseconds() - start;
-    return result;
-}
-
-void printProfile(tfctx *ctx) {
-    fprintf(stderr,"%-16s %10s %14s %13s\n",
-            "WORD","CALLS","TOTAL (ms)","AVG (µs)");
-    for(size_t j = 0; j < ctx->functable.func_count; j++) {
-        tffuncentry *fe = ctx->functable.func_table[j];
-        if (fe->call_count == 0) continue;
-        fprintf(stderr,"%-16s %10zu %14.3f %12.3f\n",
-                fe->name->str.ptr,fe->call_count,fe->total_ms,
-                fe->total_ms * 1000 / fe->call_count);
-    }
-}
-
 /* Execute the Toy Forth program stored into the list 'prg'. */
 int exec(tfctx *ctx, tfobj *prg) {
     assert(prg->type == TFOBJ_TYPE_LIST);
+    const tfprofiler *profiler = ctx->profiler;
     size_t loop_base = ctx->looplist.count;
     size_t if_depth = 0;
     int result = TF_OK;
     for(size_t pos = 0; pos < prg->list.len; pos++) {
         tfobj *word = prg->list.ele[pos];
         if (word->type == TFOBJ_TYPE_SYMBOL) {
-            if (ctx->profile)
-                result = profileSymbol(ctx,prg,loop_base,&if_depth,&pos);
-            else
-                result = execSymbol(ctx,prg,loop_base,&if_depth,&pos);
+
+            /* if the profiler is not NULL, start the clock */
+            double start = profiler ? profiler->clock() : 0;
+
+            /* execute the symbol */
+            result = execSymbol(ctx,prg,loop_base,&if_depth,&pos);
+
+            if (profiler) {
+                double stop = profiler->clock();
+                profiler->record(profiler->stats,word->str.ptr,stop-start);
+            }
+
             if (result == TF_ERR) break;
         } else {
             ctxStackPush(ctx,word);
@@ -865,6 +862,72 @@ int emitFunction(tfctx *ctx, char *name) {
     return result;
 }
 
+/* ============================== Profiling ================================ */
+
+/* POSIX monotonic elapsed time includes waiting. Timer resolution and
+ * profiling overhead limit measurements of short symbols. */
+double timeMilliseconds(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC,&now) != 0) {
+        perror("Reading profiling clock");
+        exit(1);
+    }
+    return now.tv_sec * 1000.0 + now.tv_nsec / 1000000.0;
+}
+
+static tfprofileentry *findProfileEntry(tfcallstats *stats, const char *name) {
+    for(size_t i = 0; i < stats->count; i++) {
+        tfprofileentry *entry = &stats->entries[i];
+        if (strcmp(entry->name,name) == 0) return entry;
+    }
+    return NULL;
+}
+
+static void collectProfileSymbols(tfcallstats *stats, const tfobj *prg) {
+    for(size_t i = 0; i < prg->list.len; i++) {
+        const tfobj *symbol = prg->list.ele[i];
+        if (symbol->type != TFOBJ_TYPE_SYMBOL || findProfileEntry(stats,symbol->str.ptr)) continue;
+        stats->entries = xrealloc(stats->entries,sizeof(*stats->entries) * (stats->count+1));
+        stats->entries[stats->count++] = (tfprofileentry){.name = symbol->str.ptr};
+    }
+}
+
+int initCallStats(tfcallstats *stats, const tfctx *ctx, const tfobj *prg) {
+    collectProfileSymbols(stats,prg);
+    /* Compilation stores user-defined bodies in the function table. */
+    for(size_t i = 0; i < ctx->functable.func_count; i++) {
+        const tfobj *user_func = ctx->functable.func_table[i]->user_func;
+        if (user_func) collectProfileSymbols(stats,user_func);
+    }
+    return stats->count;
+}
+
+void destroyCallStats(tfcallstats *stats) {
+    free(stats->entries);
+    stats->entries = NULL;
+    stats->count = 0;
+}
+
+void profileSymbol(tfcallstats *stats, const char *name, double elapsed_ms) {
+    tfprofileentry *entry = findProfileEntry(stats,name);
+    if (entry == NULL) return;
+    entry->calls++;
+    entry->total_ms += elapsed_ms;
+}
+
+void printProfile(const tfcallstats *stats) {
+    fprintf(stderr,"%-16s %10s %14s %13s\n",
+            "WORD","CALLS","TOTAL (ms)","AVG (µs)");
+
+    for(size_t j = 0; j < stats->count; j++) {
+        const tfprofileentry *entry = &stats->entries[j];
+        if (entry->calls == 0) continue;
+        fprintf(stderr,"%-16s %10zu %14.3f %12.3f\n",
+                entry->name,entry->calls,entry->total_ms,
+                entry->total_ms * 1000 / entry->calls);
+    }
+}
+
 /* ================================== Main ================================== */
 
 int main(int argc, char **argv) {
@@ -909,19 +972,27 @@ int main(int argc, char **argv) {
     fclose(fp);
 
     tfctx *ctx = createContext();
-    ctx->profile = profile;
     tfobj *prg = compile(ctx,prgtext);
     free(prgtext);
     if (prg == NULL) return 1;
     printObject(prg);
     printf("\n");
 
+    tfcallstats stats = {NULL, 0};
+    tfprofiler profiler = {&stats,timeMilliseconds,profileSymbol};
+    if (profile) {
+        initCallStats(&stats,ctx,prg);
+        ctx->profiler = &profiler;
+    }
     exec(ctx,prg);
 
     printf("Stack content at end: ");
     printObject(ctx->stack);
     printf("\n");
 
-    if (ctx->profile) printProfile(ctx);
+    if (profile) {
+        printProfile(&stats);
+        destroyCallStats(&stats);
+    }
     return 0;
 }
