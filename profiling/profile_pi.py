@@ -97,7 +97,7 @@ def write_histogram(path, rows):
                              f'{escape(row[0])}: {count:,}</title></rect>')
                 text(left + length + 6, bar_y + 7, f"{count:,}")
     text(20, bottom + 35, "Includes user words, built-ins, and control flow. Numeric literals and definition headers are excluded.")
-    text(20, bottom + 58, "Runtime counts include the final newline emit. Skipped words and jump-target delimiters are excluded.")
+    text(20, bottom + 58, "Runtime counts include the final newline emit. Skipped words are excluded; closing then words are counted.")
     parts.append("</svg>\n")
     path.write_text("\n".join(parts))
 

@@ -21,7 +21,8 @@ overlap, so adding row totals does not give the program's elapsed time.
 `profile_pi.py` counts source words and combines the native reports into
 the table and chart below. Counts include operators and control words;
 source counts exclude literals and definition headers. Runtime counts
-include only dispatched words, so skipped code and jump targets are excluded.
+include only dispatched words. Skipped branches are excluded; `then` is
+counted whenever an executed conditional closes.
 
 <!-- pi-usage:start -->
 
@@ -58,9 +59,9 @@ include only dispatched words, so skipped code and jump targets are excluded.
 | `refine_digit` | defined | 1 | 0 | 30 | 0 |
 | `set` | builtin | 15 | 7 | 9,241 | 6,149 |
 | `swap` | builtin | 1 | 0 | 1 | 0 |
-| `then` | control | 3 | 4 | 84 | 115 |
+| `then` | control | 3 | 4 | 88 | 3,120 |
 | `write_digit` | defined | 6 | 0 | 31 | 0 |
 | `x` | defined | 2 | 0 | 6,060 | 0 |
-| **Total** | | 141 | 101 | 116,849 | 98,140 |
+| **Total** | | 141 | 101 | 116,853 | 101,145 |
 
 <!-- pi-usage:end -->

@@ -313,10 +313,10 @@
 <text x="911.9" y="932.0" class="" text-anchor="start">1</text>
 <rect x="880" y="935" width="0.0" height="7" fill="#d97706"><title>swap: 0</title></rect>
 <text x="886.0" y="942.0" class="" text-anchor="start">0</text>
-<rect x="880" y="953" width="165.9" height="7" fill="#2563eb"><title>then: 84</title></rect>
-<text x="1051.9" y="960.0" class="" text-anchor="start">84</text>
-<rect x="880" y="963" width="177.5" height="7" fill="#d97706"><title>then: 115</title></rect>
-<text x="1063.5" y="970.0" class="" text-anchor="start">115</text>
+<rect x="880" y="953" width="167.6" height="7" fill="#2563eb"><title>then: 88</title></rect>
+<text x="1053.6" y="960.0" class="" text-anchor="start">88</text>
+<rect x="880" y="963" width="300.5" height="7" fill="#d97706"><title>then: 3,120</title></rect>
+<text x="1186.5" y="970.0" class="" text-anchor="start">3,120</text>
 <rect x="880" y="981" width="129.4" height="7" fill="#2563eb"><title>write_digit: 31</title></rect>
 <text x="1015.4" y="988.0" class="" text-anchor="start">31</text>
 <rect x="880" y="991" width="0.0" height="7" fill="#d97706"><title>write_digit: 0</title></rect>
@@ -326,5 +326,5 @@
 <rect x="880" y="1019" width="0.0" height="7" fill="#d97706"><title>x: 0</title></rect>
 <text x="886.0" y="1026.0" class="" text-anchor="start">0</text>
 <text x="20.0" y="1081.0" class="" text-anchor="start">Includes user words, built-ins, and control flow. Numeric literals and definition headers are excluded.</text>
-<text x="20.0" y="1104.0" class="" text-anchor="start">Runtime counts include the final newline emit. Skipped words and jump-target delimiters are excluded.</text>
+<text x="20.0" y="1104.0" class="" text-anchor="start">Runtime counts include the final newline emit. Skipped words are excluded; closing then words are counted.</text>
 </svg>

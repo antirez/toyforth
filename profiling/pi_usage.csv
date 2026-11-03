@@ -28,6 +28,6 @@ q,defined,6,0,3174,0
 refine_digit,defined,1,0,30,0
 set,builtin,15,7,9241,6149
 swap,builtin,1,0,1,0
-then,control,3,4,84,115
+then,control,3,4,88,3120
 write_digit,defined,6,0,31,0
 x,defined,2,0,6060,0

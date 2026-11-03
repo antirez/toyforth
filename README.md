@@ -65,6 +65,9 @@ Conditionals can nest, following the [Forth convention](https://forth-standard.o
 
 This leaves `[10 40]`. The interpreter prints stacks in square brackets.
 
+The [conditional examples](examples/conditionals.toy) cover all four paths
+and nested branches. They leave `[10 30 60 80 120 140 160 200]`.
+
 For a larger example:
 
 ```sh
@@ -88,7 +91,7 @@ values on the stack. This reduces the vocabulary and number of calls.
 | --- | ---: | ---: |
 | Distinct words | 31 | 17 |
 | Source word calls | 141 | 101 |
-| Runtime word calls | 116,849 | 98,140 |
+| Runtime word calls | 116,853 | 101,145 |
 
 <!-- pi-usage:end -->
 

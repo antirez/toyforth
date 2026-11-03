@@ -593,18 +593,48 @@ int pushLoopIndex(tfctx *ctx, size_t depth) {
     return TF_OK;
 }
 
-/* Skip to the next else or then belonging to the current if. */
-int skipBranch(tfobj *prg, size_t *pos, size_t *if_depth) {
+/* For a false if, resume after else or leave then for normal execution. */
+int locateElse(tfobj *prg, size_t *pos) {
     int depth = 1;
     for(size_t end = *pos+1; end < prg->list.len; end++) {
         tfobj *word = prg->list.ele[end];
         if (word->type != TFOBJ_TYPE_SYMBOL) continue;
         char *name = word->str.ptr;
+
+        /* skip inner if else then blocks */
         if (strcmp(name,"if") == 0) depth++;
         if (strcmp(name,"then") == 0) depth--;
-        if (depth == 0 || (depth == 1 && strcmp(name,"else") == 0)) {
+
+        /* find the else branch */
+        if (depth == 1 && strcmp(name,"else") == 0) {
             *pos = end;
-            if (depth == 0) (*if_depth)--;
+            return TF_OK;
+        }
+
+        /* no else branch found; we have reached the matching closing 'then' symbol */
+        if (depth == 0) {
+            *pos = end-1;
+            return TF_OK;
+        }
+    }
+    return TF_ERR;
+}
+
+/* Skip the false branch, leaving the matching then for normal execution. */
+int skipElse(tfobj *prg, size_t *pos) {
+    int depth = 1;
+    for(size_t end = *pos+1; end < prg->list.len; end++) {
+        tfobj *word = prg->list.ele[end];
+        if (word->type != TFOBJ_TYPE_SYMBOL) continue;
+        char *name = word->str.ptr;
+
+        /* skip inner if else then blocks */
+        if (strcmp(name,"if") == 0) depth++;
+        if (strcmp(name,"then") == 0) depth--;
+
+        /* we have reached the matching closing 'then' symbol */
+        if (depth == 0) {
+            *pos = end-1;
             return TF_OK;
         }
     }
@@ -618,7 +648,7 @@ int startIf(tfctx *ctx, tfobj *prg, size_t *pos, size_t *if_depth) {
     int condition = flag->i;
     release(flag);
     (*if_depth)++;
-    if (condition == 0) return skipBranch(prg,pos,if_depth);
+    if (condition == 0) return locateElse(prg,pos);
     return TF_OK;
 }
 
@@ -631,15 +661,17 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
         return startLoop(ctx,prg,pos);
     } else if (strcmp(name,"loop") == 0) {
         return advanceLoop(ctx,loop_base,pos);
-    } else if (strcmp(name,"i") == 0 ||
-               strcmp(name,"j") == 0 || strcmp(name,"k") == 0)
+    } else if (
+        strcmp(name,"i") == 0 ||
+        strcmp(name,"j") == 0 ||
+        strcmp(name,"k") == 0 )
     {
         return pushLoopIndex(ctx,name[0]-'i'+1);
     } else if (strcmp(name,"if") == 0) {
         return startIf(ctx,prg,pos,if_depth);
     } else if (strcmp(name,"else") == 0) {
         if (*if_depth == 0) return TF_ERR;
-        return skipBranch(prg,pos,if_depth);
+        return skipElse(prg,pos);
     } else if (strcmp(name,"then") == 0) {
         if (*if_depth == 0) return TF_ERR;
         (*if_depth)--;
@@ -656,6 +688,9 @@ int exec(tfctx *ctx, tfobj *prg) {
     size_t loop_base = ctx->looplist.count;
     size_t if_depth = 0;
     int result = TF_OK;
+
+    /* Helpers can move prg pos; this loop increments it afterward.
+     * pos = end skips that word; pos = end-1 executes it next. */
     for(size_t pos = 0; pos < prg->list.len; pos++) {
         tfobj *word = prg->list.ele[pos];
         if (word->type == TFOBJ_TYPE_SYMBOL) {
