@@ -10,5 +10,8 @@ profile: toyforth
 	./toyforth --profile examples/pi_golf.toy >profiling/pi_golf.stdout.txt 2>profiling/pi_golf.profile.txt
 	python3 -B profiling/profile_pi.py
 
+test: toyforth
+	./tests/test_pi.sh
+
 clean:
 	rm -rf toyforth
