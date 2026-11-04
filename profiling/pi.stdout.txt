@@ -1,0 +1,3 @@
+[30 pi_digits 10 emit]
+314159265358979323846264338327
+Stack content at end: []

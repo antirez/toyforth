@@ -1,0 +1,51 @@
+1 if 10 then
+0 if 20 then
+1 if 30 else 40 then
+0 if 50 else 60 then
+
+1 if
+    0 if
+        70
+    else
+        80
+    then
+else
+    90
+then
+
+0 if
+    1 if
+        100
+    else
+        110
+    then
+else
+    120
+then
+
+0 if
+    130
+else
+    1 if
+        140
+    else
+        150
+    then
+then
+
+1 if
+    160
+else
+    0 if
+        170
+    else
+        180
+    then
+then
+
+1 if
+    0 if
+        190
+    then
+    200
+then

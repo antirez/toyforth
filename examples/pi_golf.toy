@@ -1,0 +1,41 @@
+: pi_digits
+    6 list
+    0 pick 0 get 10 * 3 / 1 + 1 pick 5 set
+    2 1 pick 5 get list 1 pick 1 set
+
+    0 1 pick 0 get 1 + do
+        0 1 pick 2 set
+        i 1 pick 0 get - if
+            0 pick 5 get 0 do
+                0 pick 1 get i 1 - get 10 *
+                1 pick 2 get i * +
+
+                i 1 - if
+                    i 2 * 1 -
+                else
+                    10
+                then
+                1 pick 1 pick /
+                0 pick 4 pick 2 set
+                * -
+                1 pick 1 get i 1 - set
+            loop
+        then
+
+        0 pick 2 get 9 - if
+            0 pick 2 get 0 pick 10 /
+            i if
+                2 pick 4 get 1 pick + 48 + emit
+                0 i 4 pick 3 get - 1 - do
+                    57 1 pick 9 * - emit
+                loop
+            then
+            10 * - 1 pick 4 set
+            i 1 pick 3 set
+        then
+    loop
+    drop
+;
+
+30 pi_digits
+10 emit
