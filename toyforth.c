@@ -8,7 +8,7 @@
 #include <limits.h>
 #include <time.h>
 
-/* =============================== Data structrues ========================== */
+/* =============================== Data structures ========================= */
 
 #define TF_OK 0
 #define TF_ERR 1
@@ -98,19 +98,6 @@ typedef struct tfctx {
 void retain(tfobj *o);
 void release(tfobj *o);
 
-// Standard library prototypes.
-int basicMathFunctions(tfctx *ctx, char *name);
-int dupFunction(tfctx *ctx, char *name);
-int overFunction(tfctx *ctx, char *name);
-int listFunction(tfctx *ctx, char *name);
-int pickFunction(tfctx *ctx, char *name);
-int getFunction(tfctx *ctx, char *name);
-int setFunction(tfctx *ctx, char *name);
-int lenFunction(tfctx *ctx, char *name);
-int swapFunction(tfctx *ctx, char *name);
-int dropFunction(tfctx *ctx, char *name);
-int emitFunction(tfctx *ctx, char *name);
-
 // user-defined functions
 void registerUserFunction(tfctx *ctx, const tffuncentry *function);
 
@@ -118,16 +105,6 @@ void registerUserFunction(tfctx *ctx, const tffuncentry *function);
 int exec(tfctx *ctx, tfobj *prg);
 
 /* ============================ Allocation wrappers ========================= */
-
-void *xmalloc(size_t size) {
-    if (size == 0) return NULL;
-    void *ptr = malloc(size);
-    if (ptr == NULL) {
-        fprintf(stderr,"Out of memory allocating %zu bytes\n", size);
-        exit(1);
-    }
-    return ptr;
-}
 
 void *xrealloc(void *oldptr, size_t size) {
     if (size == 0) {
@@ -140,6 +117,10 @@ void *xrealloc(void *oldptr, size_t size) {
         exit(1);
     }
     return ptr;
+}
+
+void *xmalloc(size_t size) {
+    return xrealloc(NULL,size);
 }
 
 /* ========================= Object related functions =======================
@@ -159,14 +140,12 @@ tfobj *createIntObject(int i) {
     return o;
 }
 
-/* Free an object and all the other nexted objects. */
+/* Release owned elements and storage before freeing the object. */
 void freeObject(tfobj *o) {
     switch(o->type) {
     case TFOBJ_TYPE_LIST:
-        for(size_t j = 0; j < o->list.len; j++) {
-            tfobj *ele = o->list.ele[j];
-            release(ele);
-        }
+        for(size_t j = 0; j < o->list.len; j++)
+            release(o->list.ele[j]);
         free(o->list.ele);
         break;
     case TFOBJ_TYPE_SYMBOL:
@@ -231,21 +210,14 @@ tfobj *createSymbolObject(char *s, size_t len) {
     return o;
 }
 
-/* Compare the two string objects 'a' and 'b', returns 0 if they are
- * the same, '1' if a>b, '-1' if a<b. The comparsion is performed
- * using memcmp(). */
+/* Compare bytes, then lengths: return -1, 0, or 1. */
 int compareStringObject(tfobj *a, tfobj *b) {
     size_t minlen = a->str.len < b->str.len ? a->str.len : b->str.len;
     int cmp = memcmp(a->str.ptr, b->str.ptr, minlen);
 
-    if (cmp == 0) {
-        if (a->str.len == b->str.len) return 0;
-        else if (a->str.len > b->str.len) return 1;
-        else return -1;
-    } else {
-        if (cmp < 0) return -1;
-        else return 1;
-    }
+    if (cmp != 0) return cmp < 0 ? -1 : 1;
+    if (a->str.len == b->str.len) return 0;
+    return a->str.len < b->str.len ? -1 : 1;
 }
 
 /* ================================ List object ============================= */
@@ -273,13 +245,8 @@ tfobj *listPopType(tfctx *ctx, int type) {
     if (type != TFOBJ_TYPE_ALL && to_pop->type != type) return NULL;
 
     stack->list.len--;
-    if (stack->list.len == 0) {
-        free(stack->list.ele);
-        stack->list.ele = NULL;
-    } else {
-        stack->list.ele = xrealloc(stack->list.ele,
-                            sizeof(tfobj*) * (stack->list.len));
-    }
+    /* xrealloc frees storage and returns NULL when the stack becomes empty. */
+    stack->list.ele = xrealloc(stack->list.ele,sizeof(tfobj*) * stack->list.len);
     return to_pop;
 }
 
@@ -375,9 +342,7 @@ int parseUserFunction(tfctx *ctx, tfparser *parser) {
 }
 
 tfobj *compile(tfctx *ctx, char *prgtext) {
-    tfparser parser;
-    parser.prgtext = prgtext;
-    parser.p = prgtext;
+    tfparser parser = {prgtext,prgtext};
 
     tfobj *parsed = createListObject();
 
@@ -418,13 +383,8 @@ int ctxCheckStackMinLen(tfctx *ctx, size_t min) {
     return (ctx->stack->list.len < min) ? TF_ERR : TF_OK;
 }
 
-/* Pop the top element from the interpreter main stack, assuming it
- * will match 'type', otherwise NULL is returned. Also the function
- * returns NULL if the stack is empty.
- *
- * The reference counting of the popped object is not modified: it
- * is assumed that we just transfer the ownership from the stack to
- * the caller. */
+/* Return NULL for an empty stack or type mismatch; TFOBJ_TYPE_ALL accepts any.
+ * A successful pop transfers ownership without changing the reference count. */
 tfobj *ctxStackPop(tfctx *ctx, int type) {
     return listPopType(ctx, type);
 }
@@ -434,9 +394,7 @@ void ctxStackPush(tfctx *ctx, tfobj *obj) {
     listPush(ctx->stack, obj);
 }
 
-/* Resolve the function scanning the function table looking for a matching
- * name. If a matching function was not found, NULL is returned, otherwise
- * the function returns the function entry object. */
+/* Return the function table entry matching name, or NULL if none exists. */
 tffuncentry *getFunctionByName(tfctx *ctx, tfobj *name) {
     for (size_t j = 0; j < ctx->functable.func_count; j++) {
         tffuncentry *fe = ctx->functable.func_table[j];
@@ -484,44 +442,12 @@ void registerUserFunction(tfctx *ctx, const tffuncentry *function) {
     fe->callback = NULL;
 }
 
-tfctx *createContext(void) {
-    tfctx *ctx = xmalloc(sizeof(*ctx));
-    ctx->stack = createListObject();
-    ctx->profiler = NULL;
-    ctx->looplist.loops = NULL;
-    ctx->looplist.count = 0;
-    ctx->functable.func_table = NULL;
-    ctx->functable.func_count = 0;
-    registerCFunction(ctx,"+",basicMathFunctions);
-    registerCFunction(ctx,"-",basicMathFunctions);
-    registerCFunction(ctx,"*",basicMathFunctions);
-    registerCFunction(ctx,"/",basicMathFunctions);
-    registerCFunction(ctx,"%",basicMathFunctions);
-    registerCFunction(ctx,"=",basicMathFunctions);
-    registerCFunction(ctx,"dup",dupFunction);
-    registerCFunction(ctx,"over",overFunction);
-    registerCFunction(ctx,"list",listFunction);
-    registerCFunction(ctx,"pick",pickFunction);
-    registerCFunction(ctx,"get",getFunction);
-    registerCFunction(ctx,"set",setFunction);
-    registerCFunction(ctx,"len",lenFunction);
-    registerCFunction(ctx,"swap",swapFunction);
-    registerCFunction(ctx,"drop",dropFunction);
-    registerCFunction(ctx,"emit",emitFunction);
-    return ctx;
-}
-
-/* Try to resolve and call the function associated with the symbol
- * name 'word'. Return 0 if the symbol was actually bound to some
- * function and was executed, return 1 otherwise (on error). */
+/* Execute the registered word; return TF_ERR if it has no implementation. */
 int callSymbol(tfctx *ctx, tfobj *word) {
     tffuncentry *fe = getFunctionByName(ctx,word);
     if (fe == NULL || (fe->callback == NULL && fe->user_func == NULL)) return TF_ERR;
-    if (fe->user_func) {
-        return exec(ctx,fe->user_func);
-    } else {
-        return fe->callback(ctx, fe->name->str.ptr);
-    }
+    if (fe->user_func) return exec(ctx,fe->user_func);
+    return fe->callback(ctx, fe->name->str.ptr);
 }
 
 /* Find the matching loop without executing the body. */
@@ -586,7 +512,8 @@ int pushLoopIndex(tfctx *ctx, size_t depth) {
     return TF_OK;
 }
 
-/* For a false if, resume after else or leave then for normal execution. */
+/* For a false if, skip to its matching else;
+ * otherwise leave the matching then for normal dispatch to close if_depth. */
 int locateElse(tfobj *prg, size_t *pos) {
     int depth = 1;
     for(size_t end = *pos+1; end < prg->list.len; end++) {
@@ -594,7 +521,7 @@ int locateElse(tfobj *prg, size_t *pos) {
         if (word->type != TFOBJ_TYPE_SYMBOL) continue;
         char *name = word->str.ptr;
 
-        /* skip inner if else then blocks */
+        /* Only depth 1 belongs to the else being located. */
         if (strcmp(name,"if") == 0) depth++;
         if (strcmp(name,"then") == 0) depth--;
 
@@ -667,9 +594,9 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
     /* Conditional logic.
      *
      * if ... then           true:  execute body
-     * if ... then           false: locateElse skips body
-     * if ... else ... then  true:  execute true body; skipElse skips false body
-     * if ... else ... then  false: locateElse skips true body; execute false body
+     * if ... then           false: skip body, resume at then
+     * if ... else ... then  true:  execute true body; skip false body
+     * if ... else ... then  false: skip true body; execute false body
      *
      * All four paths close through then; only its handler decrements if_depth.
      * Scanners leave then for normal dispatch by exec.
@@ -905,6 +832,34 @@ int emitFunction(tfctx *ctx, char *name) {
     int result = putchar(o->i) == EOF ? TF_ERR : TF_OK;
     release(o);
     return result;
+}
+
+/* Create an empty context and register built-ins, whose definitions are above. */
+tfctx *createContext(void) {
+    tfctx *ctx = xmalloc(sizeof(*ctx));
+    ctx->stack = createListObject();
+    ctx->profiler = NULL;
+    ctx->looplist.loops = NULL;
+    ctx->looplist.count = 0;
+    ctx->functable.func_table = NULL;
+    ctx->functable.func_count = 0;
+    registerCFunction(ctx,"+",basicMathFunctions);
+    registerCFunction(ctx,"-",basicMathFunctions);
+    registerCFunction(ctx,"*",basicMathFunctions);
+    registerCFunction(ctx,"/",basicMathFunctions);
+    registerCFunction(ctx,"%",basicMathFunctions);
+    registerCFunction(ctx,"=",basicMathFunctions);
+    registerCFunction(ctx,"dup",dupFunction);
+    registerCFunction(ctx,"over",overFunction);
+    registerCFunction(ctx,"list",listFunction);
+    registerCFunction(ctx,"pick",pickFunction);
+    registerCFunction(ctx,"get",getFunction);
+    registerCFunction(ctx,"set",setFunction);
+    registerCFunction(ctx,"len",lenFunction);
+    registerCFunction(ctx,"swap",swapFunction);
+    registerCFunction(ctx,"drop",dropFunction);
+    registerCFunction(ctx,"emit",emitFunction);
+    return ctx;
 }
 
 /* ============================== Profiling ================================ */
