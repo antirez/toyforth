@@ -451,7 +451,7 @@ int callSymbol(tfctx *ctx, tfobj *word) {
 }
 
 /* Find the matching loop without executing the body. */
-int skipLoop(tfobj *prg, size_t *pos) {
+int locateLoopEnd(tfobj *prg, size_t *pos) {
     int depth = 1;
     for(size_t end = *pos+1; end < prg->list.len; end++) {
         tfobj *word = prg->list.ele[end];
@@ -478,7 +478,7 @@ int startLoop(tfctx *ctx, tfobj *prg, size_t *pos) {
 
     int result = TF_OK;
     if (start->i == limit->i) {
-        result = skipLoop(prg,pos);
+        result = locateLoopEnd(prg,pos);
     } else {
         tflooplist *list = &ctx->looplist;
         list->loops = xrealloc(list->loops,sizeof(tfloop) * (list->count+1));
@@ -493,9 +493,8 @@ int startLoop(tfctx *ctx, tfobj *prg, size_t *pos) {
 }
 
 /* Advance the counter, then repeat the body or discard the completed loop. */
-int advanceLoop(tfctx *ctx, size_t loop_base, size_t *pos) {
+int advanceLoop(tfctx *ctx, size_t *pos) {
     tflooplist *list = &ctx->looplist;
-    if (list->count == loop_base) return TF_ERR;
     tfloop *loop = &list->loops[list->count-1];
     loop->index += loop->index < loop->limit ? 1 : -1;
     if (loop->index != loop->limit) *pos = loop->start;
@@ -541,7 +540,7 @@ int locateElse(tfobj *prg, size_t *pos) {
 }
 
 /* Skip the false branch, leaving the matching then for normal execution. */
-int skipElse(tfobj *prg, size_t *pos) {
+int locateThen(tfobj *prg, size_t *pos) {
     int depth = 1;
     for(size_t end = *pos+1; end < prg->list.len; end++) {
         tfobj *word = prg->list.ele[end];
@@ -582,7 +581,8 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
     if (strcmp(name,"do") == 0) {
         return startLoop(ctx,prg,pos);
     } else if (strcmp(name,"loop") == 0) {
-        return advanceLoop(ctx,loop_base,pos);
+        if (ctx->looplist.count == loop_base) return TF_ERR;
+        return advanceLoop(ctx,pos);
     } else if (
         strcmp(name,"i") == 0 ||
         strcmp(name,"j") == 0 ||
@@ -605,7 +605,7 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
         return startIf(ctx,prg,pos,if_depth);
     } else if (strcmp(name,"else") == 0) {
         if (*if_depth == 0) return TF_ERR;
-        return skipElse(prg,pos);
+        return locateThen(prg,pos);
     } else if (strcmp(name,"then") == 0) {
         if (*if_depth == 0) return TF_ERR;
         (*if_depth)--;
@@ -620,9 +620,9 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
 int exec(tfctx *ctx, tfobj *prg) {
     assert(prg->type == TFOBJ_TYPE_LIST);
     const tfprofiler *profiler = ctx->profiler;
+    /* Number of loops belonging to callers when this exec() began. */
     size_t loop_base = ctx->looplist.count;
-    /* Each exec call owns its conditional nesting. Recursive calls have their
-     * own if_depth, and each prg must close its ifs before returning. */
+    /* Track this call's open ifs; all must close before returning. */
     size_t if_depth = 0;
     int result = TF_OK;
 
