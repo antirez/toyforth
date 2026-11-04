@@ -298,7 +298,7 @@ void parseSpaces(tfparser *parser) {
     while(isspace(parser->p[0])) parser->p++;
 }
 
-#define MAX_NUM_LEN 128
+#define MAX_NUM_LEN 12 // 32-bit int: 10 decimal digits, sign, and terminating NUL.
 tfobj *parseNumber(tfparser *parser) {
     char buf[MAX_NUM_LEN];
     char *start = parser->p;
@@ -314,6 +314,9 @@ tfobj *parseNumber(tfparser *parser) {
 
     memcpy(buf, start, numlen);
     buf[numlen] = 0;
+
+    long long value = strtoll(buf,NULL,10);
+    if (value < INT_MIN || value > INT_MAX) return NULL;
 
     tfobj *o = createIntObject(atoi(buf));
     return o;
