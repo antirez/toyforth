@@ -37,8 +37,8 @@ typedef struct tfobj {
 } tfobj;
 
 typedef struct tfparser {
-    char *prg; // The program to compile into a list.
-    char *p;   // Next token to parse.
+    char *prgtext; // The program text to compile into a list.
+    char *p;       // Next token to parse.
 } tfparser;
 
 /* Function table entry: each of this entry represents a symbol name
@@ -337,7 +337,7 @@ tfobj *parseToken(tfparser *parser) {
     if (isdigit(parser->p[0]) ||
         ((parser->p[0] == '-' || parser->p[0] == '+') &&
          isdigit(parser->p[1]) &&
-         (parser->p == parser->prg || isspace(parser->p[-1]) ||
+         (parser->p == parser->prgtext || isspace(parser->p[-1]) ||
           parser->p[-1] == ';')))
     {
         return parseNumber(parser);
@@ -381,10 +381,10 @@ int parseUserFunction(tfctx *ctx, tfparser *parser) {
     return result;
 }
 
-tfobj *compile(tfctx *ctx, char *prg) {
+tfobj *compile(tfctx *ctx, char *prgtext) {
     tfparser parser;
-    parser.prg = prg;
-    parser.p = prg;
+    parser.prgtext = prgtext;
+    parser.p = prgtext;
 
     tfobj *parsed = createListObject();
 
