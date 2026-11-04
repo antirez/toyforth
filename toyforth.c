@@ -159,12 +159,6 @@ tfobj *createIntObject(int i) {
     return o;
 }
 
-tfobj *createBoolObject(int i) {
-    tfobj *o = createObject(TFOBJ_TYPE_BOOL);
-    o->i = i;
-    return o;
-}
-
 /* Free an object and all the other nexted objects. */
 void freeObject(tfobj *o) {
     switch(o->type) {
@@ -287,10 +281,6 @@ tfobj *listPopType(tfctx *ctx, int type) {
                             sizeof(tfobj*) * (stack->list.len));
     }
     return to_pop;
-}
-
-tfobj *listPop(tfctx *ctx) {
-    return listPopType(ctx,TFOBJ_TYPE_ALL);
 }
 
 /* ===================== Turn program into toy forth list =================== */
