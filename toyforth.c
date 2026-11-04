@@ -657,6 +657,8 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
                size_t *if_depth, size_t *pos) {
     tfobj *word = prg->list.ele[*pos];
     char *name = word->str.ptr;
+
+    /* Loop logic. */
     if (strcmp(name,"do") == 0) {
         return startLoop(ctx,prg,pos);
     } else if (strcmp(name,"loop") == 0) {
@@ -667,7 +669,19 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
         strcmp(name,"k") == 0 )
     {
         return pushLoopIndex(ctx,name[0]-'i'+1);
-    } else if (strcmp(name,"if") == 0) {
+    }
+
+    /* Conditional logic.
+     *
+     * if ... then           true:  execute body
+     * if ... then           false: locateElse skips body
+     * if ... else ... then  true:  execute true body; skipElse skips false body
+     * if ... else ... then  false: locateElse skips true body; execute false body
+     *
+     * All four paths close through then; only its handler decrements if_depth.
+     * Scanners leave then for normal dispatch by exec.
+     */
+    if (strcmp(name,"if") == 0) {
         return startIf(ctx,prg,pos,if_depth);
     } else if (strcmp(name,"else") == 0) {
         if (*if_depth == 0) return TF_ERR;
@@ -676,9 +690,10 @@ int execSymbol(tfctx *ctx, tfobj *prg, size_t loop_base,
         if (*if_depth == 0) return TF_ERR;
         (*if_depth)--;
         return TF_OK;
-    } else {
-        return callSymbol(ctx,word);
     }
+
+    /* Registered function call. */
+    return callSymbol(ctx,word);
 }
 
 /* Execute the Toy Forth program stored into the list 'prg'. */
@@ -686,6 +701,8 @@ int exec(tfctx *ctx, tfobj *prg) {
     assert(prg->type == TFOBJ_TYPE_LIST);
     const tfprofiler *profiler = ctx->profiler;
     size_t loop_base = ctx->looplist.count;
+    /* Each exec call owns its conditional nesting. Recursive calls have their
+     * own if_depth, and each prg must close its ifs before returning. */
     size_t if_depth = 0;
     int result = TF_OK;
 
